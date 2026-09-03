@@ -1,0 +1,46 @@
+# Workflow de automatizacion: GitHub → Pipedream → Netlify + Email
+# Este workflow dispara un webhook a Pipedream en cada push a la rama main
+
+name: Auto-Deploy con Pipedream
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Permite ejecutar manualmente desde GitHub Actions
+
+jobs:
+  trigger-pipedream:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obtener info del commit
+        id: commit
+        run: |
+          echo "commit_sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "commit_message=$(git log -1 --pretty=%B | head -1)" >> $GITHUB_OUTPUT
+          echo "commit_author=${{ github.actor }}" >> $GITHUB_OUTPUT
+          echo "repo_name=${{ github.repository }}" >> $GITHUB_OUTPUT
+          echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+
+      - name: Disparar webhook a Pipedream
+        run: |
+          curl -X POST "${{ secrets.PIPEDREAM_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "event": "push",
+              "repository": "${{ steps.commit.outputs.repo_name }}",
+              "branch": "${{ steps.commit.outputs.branch }}",
+              "commit_sha": "${{ steps.commit.outputs.commit_sha }}",
+              "commit_message": "${{ steps.commit.outputs.commit_message }}",
+              "author": "${{ steps.commit.outputs.commit_author }}",
+              "timestamp": "'$(date -Iseconds)'"
+            }'
+        env:
+          PIPEDREAM_WEBHOOK_URL: ${{ secrets.PIPEDREAM_WEBHOOK_URL }}
+
+      - name: Confirmar disparo
+        run: |
+          echo "✅ Webhook enviado a Pipedream"
+          echo "📦 Repo: ${{ steps.commit.outputs.repo_name }}"
+          echo "🔀 Branch: ${{ steps.commit.outputs.branch }}"
+          echo "📝 Commit: ${{ steps.commit.outputs.commit_message }}"
